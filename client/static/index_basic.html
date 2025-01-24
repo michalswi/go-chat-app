@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>chat-app</title>
+    </head>
+    <body>
+        <h1>chat-app</h1>
+        <input type="text" id="username" placeholder="Enter your username">
+        <button onclick="connect()">Connect</button>
+
+        <div id="chat"></div>
+
+        <input type="text" id="recipient" placeholder="Recipient Username">
+        <input type="text" id="message" placeholder="Message">
+        <button onclick="sendMessage()">Send Message</button>
+
+        <script>
+            let ws;
+
+            function connect() {
+                const username = document.getElementById("username").value;
+                ws = new WebSocket("wss://localhost:443/ws");
+                
+                ws.onopen = () => {
+                    ws.send(username); // Send the username as the first message
+                };
+
+                ws.onmessage = (event) => {
+                    const chat = document.getElementById("chat");
+                    chat.innerHTML += event.data + "<br>";
+                };
+
+                ws.onclose = () => {
+                    alert("Connection closed.");
+                };
+            }
+
+            function sendMessage() {
+                const recipient = document.getElementById("recipient").value;
+                const message = document.getElementById("message").value;
+                const formattedMessage = recipient + "|" + message; // Format: recipient|message
+                ws.send(formattedMessage);
+            }
+        </script>
+        <div class="container" style="font-size: small;">
+            <hr/>
+            <p>
+                Copyright &copy; 2049
+                michalswi<br>
+            </p>
+        </div> 
+    </body>
+</html>

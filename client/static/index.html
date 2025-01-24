@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>chat-app</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+            }
+            .error {
+                color: red;
+            }
+            .success {
+                color: green;
+            }
+            #chat {
+                margin: 20px 0;
+                border: 1px solid #ddd;
+                padding: 10px;
+                max-height: 300px;
+                overflow-y: auto;
+            }
+            input, button {
+                margin: 5px 0;
+                padding: 10px;
+            }
+            button:disabled {
+                background-color: #ccc;
+                cursor: not-allowed;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>chat-app</h1>
+
+        <!-- Connection Section -->
+        <div>
+            <input type="text" id="username" placeholder="Enter your username">
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <p id="status"></p>
+        </div>
+
+        <!-- Chat Section -->
+        <div id="chat"></div>
+
+        <!-- Message Input -->
+        <div class="form-group">
+            <input type="text" id="recipient" placeholder="Recipient Username" disabled>
+            <input type="text" id="message" placeholder="Message" disabled>
+            <button onclick="sendMessage()" disabled>Send Message</button>
+        </div>
+
+        <script>
+            let ws;
+
+            function connect() {
+                const username = document.getElementById("username").value.trim();
+                const status = document.getElementById("status");
+
+                if (!username) {
+                    status.innerHTML = '<span class="error">Please enter a username.</span>';
+                    return;
+                }
+
+                // Initialize WebSocket
+                ws = new WebSocket("wss://localhost:443/ws");
+
+                ws.onopen = () => {
+                    console.log("WebSocket connection opened.");
+                    ws.send(username); // Send the username as the first message
+                    status.innerHTML = '<span class="success">Connected to the server!</span>';
+                    enableMessaging();
+                };
+
+                ws.onmessage = (event) => {
+                    console.log("Message received:", event.data);
+                    const chat = document.getElementById("chat");
+                    chat.innerHTML += `<div>${event.data}</div>`;
+                    chat.scrollTop = chat.scrollHeight; // Auto-scroll to the bottom
+                };
+
+                ws.onclose = () => {
+                    console.log("WebSocket connection closed.");
+                    status.innerHTML = '<span class="error">Connection closed. Please reconnect.</span>';
+                    disableMessaging();
+                };
+
+                ws.onerror = (error) => {
+                    console.error("WebSocket error:", error);
+                    status.innerHTML = '<span class="error">An error occurred. Please check the connection.</span>';
+                    disableMessaging();
+                };
+            }
+
+            function sendMessage() {
+                const recipient = document.getElementById("recipient").value.trim();
+                const message = document.getElementById("message").value.trim();
+
+                if (!recipient || !message) {
+                    alert("Both recipient and message fields are required!");
+                    return;
+                }
+
+                const formattedMessage = `${recipient}|${message}`; // Format: recipient|message
+                console.log("Sending message:", formattedMessage);
+
+                try {
+                    ws.send(formattedMessage);
+                } catch (error) {
+                    console.error("Failed to send message:", error);
+                    alert("Failed to send the message. Make sure you're connected.");
+                }
+            }
+
+            function enableMessaging() {
+                document.getElementById("recipient").disabled = false;
+                document.getElementById("message").disabled = false;
+                document.querySelector("button[onclick='sendMessage()']").disabled = false;
+            }
+
+            function disableMessaging() {
+                document.getElementById("recipient").disabled = true;
+                document.getElementById("message").disabled = true;
+                document.querySelector("button[onclick='sendMessage()']").disabled = true;
+            }
+        </script>
+        <div class="container" style="font-size: small;">
+            <hr/>
+            <p>
+                Copyright &copy; 2049
+                michalswi<br>
+            </p>
+        </div> 
+    </body>
+</html>
