@@ -76,8 +76,10 @@
                 ws.onmessage = (event) => {
                     console.log("Message received:", event.data);
                     const chat = document.getElementById("chat");
-                    chat.innerHTML += `<div>${event.data}</div>`;
-                    chat.scrollTop = chat.scrollHeight; // Auto-scroll to the bottom
+                    const timestamp = new Date().toLocaleTimeString();
+                    chat.innerHTML += `<div>[${timestamp}] ${event.data}</div>`;
+                    // Auto-scroll to the bottom
+                    chat.scrollTop = chat.scrollHeight;
                 };
 
                 ws.onclose = () => {

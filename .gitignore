@@ -3,3 +3,4 @@ __*
 cert.*
 Makefile
 Dockerfile
+.DS*

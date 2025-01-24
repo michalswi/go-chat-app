@@ -20,14 +20,8 @@ go run client/client.go
 
 ![img1](./img/img1.png)
 
-\> connect **merry**
+\> connect **john** and send `ping` to **merry**
 ![img2](./img/img2.png)
 
-\> connect **john**
+\> connected **merry** and received message from **john**
 ![img3](./img/img3.png)
-
-\> **john** sends message 'ping' to **merry**
-![img4](./img/img4.png)
-
-\> **merry** sends message 'pong' to **john**
-![img5](./img/img5.png)
