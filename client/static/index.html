@@ -75,6 +75,7 @@
 
                 ws.onmessage = (event) => {
                     console.log("Message received:", event.data);
+                    const sanitizedMessage = sanitize(event.data);
                     const chat = document.getElementById("chat");
                     const timestamp = new Date().toLocaleTimeString();
                     chat.innerHTML += `<div>[${timestamp}] ${event.data}</div>`;
@@ -95,17 +96,23 @@
                 };
             }
 
+            function sanitize(input) {
+                let div = document.createElement('div');
+                div.textContent = input;
+                return div.innerHTML;
+            }
+
             function sendMessage() {
-                const recipient = document.getElementById("recipient").value.trim();
-                const message = document.getElementById("message").value.trim();
+                const recipient = sanitize(document.getElementById("recipient").value.trim());
+                const message = sanitize(document.getElementById("message").value.trim());
 
                 if (!recipient || !message) {
                     alert("Both recipient and message fields are required!");
                     return;
                 }
 
-                const formattedMessage = `${recipient}|${message}`; // Format: recipient|message
-                console.log("Sending message:", formattedMessage);
+                const formattedMessage = `${recipient}|${message}`;
+                console.log("Sending sanitized message:", formattedMessage);
 
                 try {
                     ws.send(formattedMessage);

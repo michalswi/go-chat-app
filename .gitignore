@@ -4,3 +4,4 @@ cert.*
 Makefile
 Dockerfile
 .DS*
+redis/redis-data/*

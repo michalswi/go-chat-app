@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
@@ -20,7 +24,10 @@ var upgrader = websocket.Upgrader{
 
 	// Restrict Origins for security (avoid '# CORS')
 	// CheckOrigin: func(r *http.Request) bool {
-	// 	allowedOrigins := []string{"http://localhost", "https://yourdomain.com"}
+	// 	allowedOrigins := []string{
+	// 		"https://yourdomain.com",
+	// 		"https://www.yourdomain.com",
+	// 	}
 	// 	origin := r.Header.Get("Origin")
 	// 	for _, allowed := range allowedOrigins {
 	// 		if origin == allowed {
@@ -35,9 +42,13 @@ var connections = make(map[string]*websocket.Conn)
 var mu sync.Mutex
 var logger = log.New(os.Stdout, "chat-app-server ", log.LstdFlags|log.Lshortfile|log.Ltime|log.LUTC)
 
-// todo
 var redisClient *redis.Client
 var ctx = context.Background()
+
+const maxConnectionsPerIP = 1
+const maxConnectionsPerUser = 1
+
+var ipConnections = make(map[string]int)
 
 func main() {
 	port := getEnv("SERVER_PORT", "443")
@@ -46,11 +57,21 @@ func main() {
 	redisAddr := getEnv("REDIS_ADDR", "")
 	redisPass := getEnv("REDIS_PASS", "")
 
+	srv := &http.Server{
+		Addr:         ":" + port,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
 	if redisAddr != "" {
 		redisClient = redis.NewClient(&redis.Options{
 			Addr:     redisAddr,
 			Password: redisPass,
 			DB:       0,
+			// TLSConfig: &tls.Config{
+			// 	InsecureSkipVerify: true,
+			// },
 		})
 		_, err := redisClient.Ping(ctx).Result()
 		if err != nil {
@@ -59,14 +80,19 @@ func main() {
 		logger.Println("Connected to Redis")
 	}
 
-	http.HandleFunc("/hc", hc)
-	http.HandleFunc("/ws", handleConnections)
+	http.HandleFunc("/hz", hz)
+	http.HandleFunc("/ws", rateLimit(handleConnections))
 
-	logger.Println("Server is ready to handle requests at port", port)
-	err := http.ListenAndServeTLS(":"+port, certFile, keyFile, nil)
-	if err != nil {
-		logger.Fatalf("Failed to start TLS server: %v", err)
-	}
+	go func() {
+		logger.Println("Server is ready to handle requests at port", port)
+		if err := http.ListenAndServeTLS(":"+port, certFile, keyFile, nil); !errors.Is(err, http.ErrServerClosed) {
+			logger.Fatalf("Failed to start TLS server: %v", err)
+		}
+		logger.Println("Stopped serving new connections.")
+	}()
+
+	// shutdown server
+	gracefulShutdown(srv)
 }
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
@@ -88,6 +114,12 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	if _, exists := connections[username]; exists {
 		conn.WriteMessage(websocket.TextMessage, []byte("Username already in use. Please choose another."))
+		mu.Unlock()
+		return
+	}
+	if countConnectionsByUsername(username) >= maxConnectionsPerUser {
+		conn.WriteMessage(websocket.TextMessage, []byte("Too many connections for this username"))
+		logger.Printf("Too many connections from this username: %s.", username)
 		mu.Unlock()
 		return
 	}
@@ -123,8 +155,14 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			logger.Printf("Connection error with user '%s': %v", username, err)
 			break
 		}
-
 		messageParts := string(msg)
+
+		// enforce a maximum message length
+		if len(messageParts) > 1024 {
+			conn.WriteMessage(websocket.TextMessage, []byte("Message too long."))
+			continue
+		}
+
 		separator := "|"
 		idx := strings.Index(messageParts, separator)
 		if idx != -1 {
@@ -175,7 +213,7 @@ func broadcastMessage(message, sender string) {
 	}
 }
 
-func hc(w http.ResponseWriter, r *http.Request) {
+func hz(w http.ResponseWriter, r *http.Request) {
 	logger.Printf("hc endpoint: %s", r.Method)
 	_, err := w.Write([]byte("ok"))
 	if err != nil {
@@ -189,4 +227,51 @@ func getEnv(key, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+func gracefulShutdown(srv *http.Server) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+	shutdownCtx, shutdownRelease := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownRelease()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Fatalf("Could not gracefully shutdown the server: %v", err)
+	}
+	logger.Println("Graceful shutdown complete.")
+}
+
+func rateLimit(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		clientIP := r.RemoteAddr
+
+		mu.Lock()
+		if ipConnections[clientIP] >= maxConnectionsPerIP {
+			mu.Unlock()
+			http.Error(w, "Too many connections from this IP address", http.StatusTooManyRequests)
+			logger.Printf("Too many connections from this IP address: %s.", clientIP)
+			return
+		}
+		ipConnections[clientIP]++
+		mu.Unlock()
+
+		defer func() {
+			mu.Lock()
+			ipConnections[clientIP]--
+			mu.Unlock()
+		}()
+
+		next.ServeHTTP(w, r)
+	}
+}
+
+func countConnectionsByUsername(username string) int {
+	count := 0
+	for user := range connections {
+		if user == username {
+			count++
+		}
+	}
+	return count
 }
