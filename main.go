@@ -45,6 +45,7 @@ var logger = log.New(os.Stdout, "chat-app-server ", log.LstdFlags|log.Lshortfile
 var redisClient *redis.Client
 var ctx = context.Background()
 
+// rate limiting
 const maxConnectionsPerIP = 1
 const maxConnectionsPerUser = 1
 
@@ -52,8 +53,8 @@ var ipConnections = make(map[string]int)
 
 func main() {
 	port := getEnv("SERVER_PORT", "443")
-	certFile := getEnv("CERT", "cert.crt")
-	keyFile := getEnv("KEY", "cert.key")
+	certFile := getEnv("CERT", "./certs/cert.crt")
+	keyFile := getEnv("KEY", "./certs/cert.key")
 	redisAddr := getEnv("REDIS_ADDR", "")
 	redisPass := getEnv("REDIS_PASS", "")
 
@@ -214,7 +215,7 @@ func broadcastMessage(message, sender string) {
 }
 
 func hz(w http.ResponseWriter, r *http.Request) {
-	logger.Printf("hc endpoint: %s", r.Method)
+	logger.Printf("hz endpoint: %s from: %s", r.Method, r.RemoteAddr)
 	_, err := w.Write([]byte("ok"))
 	if err != nil {
 		logger.Println("Error writing response:", err)
