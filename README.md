@@ -2,6 +2,10 @@
 
 Messages are stateless.
 
+Update `certs/` dir with **cert** and **key** .  
+Update [index.html](./client/static/index.html) with **server's** IP instead of **localhost** .
+
+
 ### \# server
 
 ```
@@ -10,6 +14,7 @@ go run main.go
 > if self-signed certificate, open first:
 https://localhost/
 ```
+
 
 ### \# client
 ```

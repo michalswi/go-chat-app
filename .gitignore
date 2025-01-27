@@ -1,6 +1,6 @@
 *.rdb
 __*
-cert.*
+certs/cert.*
 Makefile
 Dockerfile
 .DS*
